@@ -1,0 +1,426 @@
+---------------------------------------------------
+release date: 2024/05/15
+driver version: 6.032.00
+01.Support kernel 6.1.
+02.Fix errors reported by coverity.
+03.Fix rx hang after drop rx packet.
+   cur_rx is not increased after drop rx packet. It will cause driver
+   alway check the same rx desc that cause rx hang.
+04.Fix compiling error for Linux kernel 6.4.10 and later.
+   This error results from commit d457a0e329b0 ("net: move gso declarations
+   and functions to their own files").
+05.Remove multicast filter limit.
+   Once upon a time, when r8169 was new, the multicast filter limit code
+   was copied from RTL8139 driver. There the filter limit is even
+   user-configurable.
+   The filtering is hash-based and we don't have perfect filtering.
+   Actually the mc filtering on RTL8125 still seems to be the same
+   as used on 8390/NE2000. So it's not clear to me which benefit it
+   should bring when switching to all-multi mode once a certain number
+   of filter bits is set. More the opposite: Filtering out at least
+   some unwanted mc traffic is better than no filtering.
+   Also the available chip documentation doesn't mention any restriction.
+   Therefore remove the filter limit.
+   UPSTREAM: cd04b44bf055 ("r8169: remove multicast filter limit")
+06.Fix compiling warning messages.
+   Fix compiling warning messages report by gcc-13.
+07.Implement ethtool's get_channels() callback.
+   Implement the .get_channels functionality. This feature is necessary
+   for some tools, such as ethtool -x, which need to retrieve the queue
+   count.
+08.Add helper function rtl8169_get_hw_wol().
+   rtl8169_get_hw_wol() is used to get device's wol setting.
+09.Fix sleeping while holding spinlock.
+   As device_set_wakeup_enable can now sleep, move the call to outside
+   the critical section.
+   UPSTREAM: ea80907ff066 ("r8169: fix sleeping while holding spinlock")
+10.Move code.
+   Moving the setting of wol and speed related code into function
+   rtl8169_init_software_variable() to make function rtl8169_init_one()
+   more clear.
+
+release date: 2022/10/19
+driver version: 6.031.00
+01.Use dma_alloc_coherent() instead of pci_alloc_consistent().
+   Using dma_alloc_coherent() permits to use GFP_KERNEL allocations instead
+   of GFP_ATOMIC ones. Its better when a machine is out of memory, because
+   this allows driver to sleep to get its memory and succeed its init,
+   especially when allocating high order pages.
+02.Support kernel 5.18.
+03.Support kernel 5.19.
+04.Fix system crash when calling free_netdev().
+   HAVE_FREE_NETDEV has been remove been removed from the kernel 3.1.
+   free_netdev() always be defined to kfree() that caused this issue.
+05.Prevent hardware fetch wrong desc.
+   Hardware may fetch wrong desc(last + 1), so allocate one more desc to prevent
+   this issue.
+06.Update rx interrupt barrier.
+   Move rmb() after checking DescOwn to  keep us from reading any
+   other fields out of the Rx descriptor until we know the status
+   of DescOwn.
+07.Add check rx packet length.
+   This is for preventing receiving packets with invalid packet length.
+08.Add define channel wait time.
+   Now timeout value is set to 20ms and check hardware flag every 1us.
+
+release date: 2022/05/17
+driver version: 6.030.01
+01.Add support setting flow control with ethtool.
+   set:
+   # ethtool -A ethX autoneg on rx on tx on
+   get:
+   # ethtool -a ethX
+02.Avoid memcpy() over-reading of ETH_SS_STATS
+   In preparation for FORTIFY_SOURCE performing compile-time and run-time
+   field bounds checking for memcpy(), memmove(), and memset(), avoid
+   intentionally reading across neighboring array fields.
+
+   The memcpy() is copying the entire structure, not just the first array.
+   Adjust the source argument so the compiler can do appropriate bounds
+   checking.
+03.Handle tx before rx in napi poll(from r8169).
+   Cleaning up tx descriptors first increases the chance that
+   rtl_rx() can allocate new skb's from the cache.
+04.Support kernel 5.17.
+05.Split out ndo_eth_ioctl.
+   This patch is from a76053707dbf ("dev_ioctl: split out ndo_eth_ioctl").
+06.Not reset hardware in esd timer when pci link is down.
+
+release date: 2021/06/11
+driver version: 6.029.00
+01.Change minimum MTU to 68 bytes (RFC 791).
+   The IP header is up to 60 bytes and the smallest payload is 8 bytes.
+   So the minimum MTU is 60 + 8 = 68 bytes.
+02.Default disable SG/TSO.
+   There has been a number of reports that using SG/TSO results in
+   tx timeouts. However for a lot of people SG/TSO works fine.
+   Therefore disable both features by default, but allow users to
+   enable them. Use at own risk!
+03.Add SPDX license identifier.
+04.Fix kernel panic when use ShortPacketEmptyBuffer.
+05.Use checksum help api.
+06.Fix errors reported by coverity.
+07.Request irq after init ring.
+   This prevent enable interrupt before request irq.
+08.Not block driver init when call pci_set_mwi fail.
+09.Change the return type of ndo_start_xmit from int to netdev_tx_t.
+   This fix CFI(Control flow integrity) check fail.
+10.Fix cancel NULL work.
+11.Fix DMA being used after buffer free if WoL is enabled(from r8169).
+   IOMMU errors have been reported if WoL is enabled and interface is
+   brought down. It turned out that the network chip triggers DMA
+   transfers after the DMA buffers have been freed. For WoL to work we
+   need to leave rx enabled, therefore simply stop the chip from being
+   a DMA busmaster.
+
+release date: 2020/04/13
+driver version: 6.028.02
+01.Eliminate WARN_ON(call trace) message when remove module on kernel 5.x.
+02.Use device model DMA API.
+03.Support kernel 5.4.
+   The linux headers from http://kernel.ubuntu.com/~kernel-ppa/mainline are
+   built with a gcc 9 version.  This causes CONFIG_CC_HAS_ASM_INLINE to be
+   set to true.
+   However the gcc level that is installed by default on ubuntu 18.04.3 is
+   still gcc 7.4.  This level doesn't meet the criteria for supporting
+   CONFIG_CC_HAS_ASM_INLINE, so the building with the linux headers will
+   fail.
+   https://www.mail-archive.com/ubuntu-bugs@lists.ubuntu.com/msg5671020.html
+
+   Should use gcc 9.1+, gcc 8.3 and (once released) gcc 7.5 to build kernel module.
+   https://github.com/torvalds/linux/commit/eb111869301e15b737315a46c913ae82bd19eb9d
+04.Write tx desc in following order.
+   buffer address
+   opt2
+   wmb()
+   opt1
+05.Fix MOXA tx hang issue.
+   Macro TX_BUFFS_AVAIL may return negative number when tx desc ring is full
+   (cur_tx equal to dirty_tx + NUM_TX_DESC).
+   This fix is related to "r8169: fix problem with TSO (TX_BUFFS_AVAIL negative value)".
+   https://patchwork.ozlabs.org/patch/157481/
+06.Write magic debug value(0x0badbeef) to tx desc opts1.
+   Doing this to check if tx desc opts1 is closed by hardware or cleared by driver.
+07.Support kernel 5.6.
+
+release date: 2019/04/01
+driver version: 6.027.02
+01.Add flag "IFF_LIVE_ADDR_CHANGE" to allow change the MAC any time.
+   https://www.spinics.net/lists/netdev/msg510926.html
+02.Remove phy_lock.
+03.'SUBDIRS' will be removed after Linux 5.3. Please use 'M=' or 'KBUILD_EXTMOD' instead.
+04.Update ESD error messages.
+05.Using 'M' instead of 'SUBDIRS' in Makefile. Kernel support 'M' start from version 2.6.
+06.Update ESD patch for fixing system hang issue.
+07.Support kernel 5.1.
+   - Using synchronize_rcu() instead of synchronize_sched().
+
+release date: 2018/06/12
+driver version: 6.026.00
+01.Get and Set speed align with upstream r8169.
+02.Support kernel 4.15.
+   - Convert timers to use timer_setup().
+03.Fixed compiler error on Red Hat Enterprise Linux 4.6 (kernel 2.6.9.67).
+04.Kernel support device_set_wakeup_enable() start from kernel version 2.6.26.
+05.Fixed ethtool command fail on kernel 2.6.9.67.
+   Kernel support "ethtool_ops" start from kernel version 2.4.23.
+06.Fixed report wrong rx checksum flag.
+   We should set skb->ip_summed to CHECKSUM_UNNECESSARY only when
+   IP+TCP/UDP checksum are both valid.
+
+release date: 2017/09/06
+driver version: 6.025.03
+1. use napi_complete_done().
+   Using napi_complete_done() instead of napi_complete() allows
+   us to use /sys/class/net/ethX/gro_flush_timeout
+   GRO layer can aggregate more packets if the flush is delayed a bit,
+   without having to set too big coalescing parameters that impact
+   latencies.
+   https://patchwork.ozlabs.org/patch/407970/
+2. For linux kernel 4.10.0, add checking return value of function napi_complete_done().
+   False: not enable interrupt.
+   True: enable interrupt.
+3. Use new api ethtool_{get|set}_link_ksettings.
+   Kernel 4.6 start to support this api.
+4. Change the name of global variable "speed" "duplex" "autoneg" to "speed_mode" "duplex_mode" "autoneg_mode".
+5. Replace init_timer with setup_time.
+   Also use mod_timer to replace add_timer.
+   mod_timer(timer, expires) is equivalent to:
+   del_timer(timer); timer->expires = expires; add_timer(timer);
+6. Set tx skb to null when dma_mapping_error.
+7. Use core min/max MTU checking (kernel 4.10.0).
+8. Update the definition of Jumbo_Frame_xxk and the code related to it.
+9. Update the code of function rtl8169_change_mtu.
+   If netif_running() return false, just call netdev_update_features() and return 0.
+10.Support kernel 4.11 and 4.12.
+11.Fixed RTL8169SB interrupt unhandled after ifconfig down.
+   RTL8169SB's interrupt seems be re-enabled after nic reset. So we re-disable interrupt after nic reset.
+12.Using RTL_NAPI_DISABLE() in rtl8169_down().
+13.If MAC address is invalid, generate a random one.
+   OS seems not accept MAC address of all zeors (00:00:00:00:00:00).
+14.Call dev_kfree_skb_any() instead of dev_kfree_skb_irq().
+   rtl8169_tx_interrupt() is used from NAPI context, it can
+   directly free skbs. dev_kfree_skb_irq() is a leftover from
+   pre-NAPI times of this driver.
+   But rtl8169_tx_interrupt() may be called from non-NAPI context,
+   so we use dev_kfree_skb_any().
+15.Be drop monitor friendly.
+   dev_kfree_skb_irq() and dev_kfree_skb_any() will increase drop packet count.
+   dev_consume_skb_irq() and dev_consume_skb_any() will not increase drop packet count.
+16.Add missing function ether_addr_copy().
+   This fixed s5 wake on lan fail, when MAC address is generated from eth_hw_addr_random().
+17.Add parameter "insmod r8169.ko s5_keep_curr_mac=1" to enable shutdown keep current MAC address.
+18.Fixed s5 wake on lan fail on Fedora.
+   On Fedora, if NET_ADDR_RANDOM flag is set (in eth_hw_addr_random()), it will set MAC address after probe.
+   If NET_ADDR_RANDOM flag is set, keep MAC address when shutdown.
+
+release date: 2017/01/11
+driver version: 6.024.02
+1. Set coherent DMA mask as well as streaming DMA mask.
+   This is from kernel patch f0076436136751359e0886f3302a2a0b3a28ba6e.
+   PCI devices that are 64-bit DMA capable should set the coherent
+   DMA mask as well as the streaming DMA mask. On some architectures,
+   these are managed separately, and so the coherent DMA mask will be
+   left at its default value of 32 if it is not set explicitly. This
+   results in errors such as
+
+         r8169 Gigabit Ethernet driver 2.3LK-NAPI loaded
+         hwdev DMA mask = 0x00000000ffffffff, dev_addr = 0x00000080fbfff000
+         swiotlb: coherent allocation failed for device 0000:02:00.0 size=4096
+         CPU: 0 PID: 1062 Comm: systemd-udevd Not tainted 4.8.0+ #35
+         Hardware name: AMD Seattle/Seattle, BIOS 10:53:24 Oct 13 2016
+
+   on systems without memory that is 32-bit addressable by PCI devices.
+2. Fixed compiler error on Fedora 14 (kernel 2.6.35.6).
+   Kernel support "hw_features" start from kernel version 2.6.39.
+3. Fixed compiler error on Fedora 9 (kernel 2.4.20).
+   Kernel support "ethtool_ops" start from kernel version 2.4.23.
+4. Fixed compiler error on kernel 2.6.25.
+   Kernel support "netif_napi_del()" start from kernel version 2.6.27.
+5. Fixed compiler error on Fedora and Centos.
+   Fedora and Centos use the APIs that are not supported by the kernel they installed.
+
+release date: 2016/10/20
+driver version: 6.023.02
+1. Support kernel 4.7.
+2. Fixed interrupt unhandled when nic is down.
+3. Fixed compiling error in kernel version 4.7.
+4. Not use function napi_alloc_skb() outside the NAPI receive.
+   This function can only be used in NAPI receive.
+
+release date: 2016/04/26
+driver version: 6.022.00
+1. Default enable DAC.
+   Some users encounter issue with DAC disabled on 64bit platform.
+   So change DAC default setting to enabled.
+2. Support NETIF_F_RXALL flag.
+3. Support NETIF_F_RXFCS flag.
+4. Fixed low performance, when TSO is enabled.
+5. Setting TSO related parameters.
+6. Add error handling in tx and rx path.
+7. Use software padding when packet size is smaller than 60 bytes.
+8. Default enable NETIF_F_SG.
+9. Update Makefile to support building driver on kernel 4.5 and later.
+   If use "find" command to locate "realtek" directory under "/kernel/drivers/net/", it will return two direcotries.
+   One belong to ethernet and another belong to wireless. This will incur error message when building driver.
+10. Fixed multicast counter in "/proc/net/dev" always 0.
+11. Replace dev_alloc_skb with napi_alloc_skb() in kernel 3.19 and later to improve performance.
+12. Fixed dump NIC statistics (by using ethtool -S ethx) fail.
+13. Endable RTL8169SB iMode.
+14. Change DAC default to disable.
+    Enable DAC will let RTL8169SB keep sending tx packets, RTL8110SC does not has this issue.
+    For compatibility, we change DAC setting to default disable.
+
+release date: 2015/10/06
+driver version: 6.021.00
+1. Change the default value of "rx_copybreak" from 200 to 0.
+   This variable may cause kernel panic in some kernel verisons.
+2. For protect Rx FIFO, add clear rx filter when exit oob mode.
+
+release date: 2015/04/30
+driver version: 6.020.00
+1. Add support for DGE-528T and DGE-530T.
+2. Ethtool -d command add support dump phy regs.
+3. Modify mdio_read and mdio_write function. And fixed typo when using these two functions.
+4. Using "prefetch" function to improve performance.
+5. Support kernel 4.0.
+6. The flush_scheduled_work() shouldn't be called, because it would
+    remove all the work items on the system queue. However, not all
+    of the work items belong to our driver.
+7. Add canceling work item in function rtl8169_close() and rtl8169_suspend().
+8. Add delete napi.
+
+release date: 2014/08/28
+driver version: 6.019.00
+1. Fixed typo in phy reset function.
+2. Support kernel 3.16.
+3. Fixed compiling error with kernel version under 3.0.0.
+4. Fix performance degrade when resume from sleep state.
+   (should write 0x7C pacth when resume from sleep state)
+5. Modify phy reset function.
+6. re-init tx/rx desc when resume from sleep state, link disconnect and setting esd patch.
+7. Modify interrupt/phy power up/phy power down functions.
+8. Modify driver variable "esd_flag".
+9. Using netif_wake_queue() instead of netif_start_queue().
+10. Fixed low performance, when TSO is enabled.
+11. Set set netif_stop_queue() before netif_carrier_off().
+    Set set netif_wake_queue() after netif_carrier_on().
+12. Fixed link speed change after driver down and up.
+
+release date: 2014/01/24
+driver version: 6.018.00
+1. Support kernel 3.8.
+2. Support kernel 3.10.
+3. Add definition of variable "FALSE" "false" "TRUE" "true", in case these
+   variables are not defined in Linux kernel.
+4. Add spinlock to protect tx.
+5. Fixed compiler warnings in kernel 2.6.9.
+6. Change wol link speed to 10Mbps.
+7. Fixed system hang when change NIC mtu.
+   This issue is caused by calling spinklock function in ISR routine.
+
+release date: 2012/05/03
+driver version: 6.017.00
+1. Support kernel 3.2 & 3.3
+2. Fix VLAN function in kernel 3.x
+3. Fix Max MTU
+
+release date: 2011/12/28
+driver version: 6.016.00
+1. support Linux kernel 3.x.
+2. correct align for rx buffer.
+3. support D-Link card
+4. fix PHY link down on 8169SB with some Giga switch
+5. avoid loading default MAC address after resume
+6. speed down when suspend; restore speed setting when resume
+
+release date: 2011/06/07
+driver version: 6.015.00
+1. Fix kernel panic in Ubuntu 11.04.
+
+release date: 2010/09/08
+driver version: 6.014.00
+1. support Linux kernel 2.6.35.
+
+release date: 2010/04/29
+driver version: 6.013.00
+1. support Linux kernel 2.6.33.
+
+release date: 2010/01/07
+driver version: 6.012.00
+1. support Linux kernel 2.6.31
+
+release date: 2009/07/17
+driver version: 6.011.00
+1. support Linux kernel 2.6.30
+2. solve the bonding disable issue that will cause the system hang.
+
+release date: 2009/04/13
+driver version: 6.010.00
+1. For RTL8110SC, elongate IFG(InterFrame Gap) in 10Mbps half duplex to avoid poor performance.
+2. supports linux kernel 2.6.29.
+3. Update GPL proclamation.
+4. Update the hardware parameter for RTL8110SC.
+
+release date: 2008/12/03
+driver version: 6.009.00
+Modify the GPHY parameters that is done wrongly.
+
+release date: 2008/09/26
+driver version: 6.008.00
+1. Solve the problem that NIC cannot connect properly after the system resumes from S3/S4.
+2. Modify the GPHY parameters for RTL8110SC to link normally for some ethernet cable with poor quality.
+
+release date: 2008/07/21
+driver version: 6.007.00
+1. support linux kernel 2.6.24 and 2.6.25
+2. This product is covered by one or more of the following patents:
+   US5,307,459, US5,434,872, US5,732,094, US6,570,884, US6,115,776, and US6,327,625.
+
+release date: 2008/04/02
+driver version: 6.006.00
+1. Modify the CPCR parameter for RTL8110S/SB/SC
+2. Modify the max mtu of jumbo frame to 7 kBytes.
+3. Make the delay longer to avoid read/write issue of PHY registers.
+
+release date: 2008/01/09
+driver version: 6.005.00
+1. Modify rtl8169_get_drvinfo() to show firmware version
+2. Support linux kernel 2.6.23
+3. add spin lock to protect phy configuration
+4. remove the GPHY parameters in link up and link down
+5. Edit the GPHY parameters of RTL8169SC.
+6. Implement a kernel timer to rescue the NIC after the PCI reset is triggered.
+
+release date: 2007/11/12
+driver version: 6.004.00
+1. Support linux kernel 2.4.20 and latter.
+2. GPHY reset remedy:
+   a. Configure the link capabilities (ANAR and GBCR), enable n-way and do n-way restart (BMCR) until GPHY reset completes.
+   b. Turn to page 0 before configure ANAR, GBCR and BMCR to prevent the GPHY from being configured wrongly.
+3. Modify mdio_read() and mdio_write().
+
+release date: 2007/08/24
+driver version: 6.003.00
+1. Support linux kernel 2.6.21 and 2.6.22
+2. Support nway force an true force.
+3. Csum offload default enabled.
+4. Adopt the Realtek released phy parameters.
+
+release date: 2007/07/10
+driver version: 6.002.00
+1. Revise the readme to notice the users to check the built-in driver and
+remove it if found.
+2. Turn on phy when driver is loaded.
+3. Implement the private ioctl for Realtek
+4. Update the default IC version.
+5. add strip in Makefile to reduce the size of driver.
+
+release date: 2007/04/26
+driver version: 6.001.00
+1. This driver is modified from the r8169.c in Linux kernel 2.6.18 and
+supports Linux 2.6.x only.
+2. This driver supports RTL8169S/8110S, a Realtek PCI Gigabit Ethernet NIC.
+3. This driver supports RTL8169SB/8110SB, a Realtek PCI Gigabit Ethernet NIC.
+4. This driver supports RTL8110SC, a Realtek PCI Gigabit Ethernet NIC.
+
