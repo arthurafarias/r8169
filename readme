@@ -153,8 +153,3 @@
 	If there is another computer inatalled RTL8169S/SB/SC and its jumbo size is also configured to be 7 kBytes, the Linux can ping it by using following command.
 
 		# ping IP_ADDRESS -s 7126 -M do
-
-# Other Mirrors
-
-1. https://github.com/mtorromeo/r8168
-2. https://www.realtek.com/Download/List?cate_id=584
